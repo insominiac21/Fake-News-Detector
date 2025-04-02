@@ -1,0 +1,8 @@
+streamlit
+requests
+numpy
+beautifulsoup4
+tensorflow
+pillow
+validators
+spacy
