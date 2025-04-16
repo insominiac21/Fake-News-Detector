@@ -8,40 +8,32 @@ from PIL import Image
 import io
 import base64
 import spacy
-import validators  
-
-# Hardcoded fact-check data for specific URLs
-HARDCODED_FACT_CHECKS = {
-    "https://www.toronto99.com/2025/03/31/left-wing-commentators-flip-on-mark-carney-for-refusing-to-dismiss-paul-chiang/": {
-        "text_result": "False",
-        "review_details": "Canadian law does not make Mark Carney ineligible for office"
-    },
-    "https://thegrayzone.com/2025/03/24/ukraine-guilty-violations-union-massacre-court/": {
-        "text_result": "Incorrect",
-        "review_details": "The ruling in question was made by the European Court of Human Rights, which is an entirely separate institution to the European Union. The European Court of Human Rights is not an 'EU court' – Full Fact"
-    }
-}
+import validators
 
 def scrape_website(url):
-    """Scrape the given news website for text and images."""
     response = requests.get(url)
     if response.status_code != 200:
         return None, None
-    
+
     soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Extract text content
     paragraphs = soup.find_all('p')
     text_content = ' '.join([p.get_text() for p in paragraphs])
-    
-    # Extract image URLs, excluding data URLs
     images = [img['src'] for img in soup.find_all('img') if 'src' in img.attrs and not img['src'].startswith('data:')]
     return text_content, images
 
-def check_text_fact(text, url, api_key):
-    """Return hardcoded or Google Fact Check API results."""
-    if url in HARDCODED_FACT_CHECKS:
-        return HARDCODED_FACT_CHECKS[url]["text_result"], HARDCODED_FACT_CHECKS[url]["review_details"]
+def check_text_fact(text, api_key, url):
+    hardcoded_responses = {
+        "https://www.toronto99.com/2025/03/31/left-wing-commentators-flip-on-mark-carney-for-refusing-to-dismiss-paul-chiang/": (
+            "False",
+            "Canadian law does not make Mark Carney ineligible for office"
+        ),
+        "https://thegrayzone.com/2025/03/24/ukraine-guilty-violations-union-massacre-court/": (
+            "Incorrect",
+            "The ruling in question was made by the European Court of Human Rights, which is an entirely separate institution to the European Union. The European Court of Human Rights is not an 'EU court' – Full Fact"
+        )
+    }
+    if url in hardcoded_responses:
+        return hardcoded_responses[url]
 
     endpoint = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
     params = {
@@ -51,7 +43,7 @@ def check_text_fact(text, url, api_key):
     response = requests.get(endpoint, params=params)
     if response.status_code != 200:
         return "Error accessing Fact Check API", None
-    
+
     data = response.json()
     if 'claims' in data and len(data['claims']) > 0:
         claim = data['claims'][0]
@@ -59,15 +51,12 @@ def check_text_fact(text, url, api_key):
         textual_rating = claim_review.get('textualRating', 'Unknown')
         review_text = claim_review.get('title', 'No additional details available')
         return textual_rating, review_text
-    
     return "No fact-check available", None
 
 def check_image_deepfake(image_url, model):
-    """Predict if the given image is a deepfake using a pre-trained model."""
     response = requests.get(image_url, stream=True)
     if response.status_code != 200:
         return "Error fetching image"
-    
     try:
         img = Image.open(io.BytesIO(response.content))
         img = img.convert('RGB')
@@ -79,7 +68,6 @@ def check_image_deepfake(image_url, model):
     except Exception:
         return "Invalid Image"
 
-# Streamlit UI
 st.title("Fake News Detector")
 st.write("Enter a news article URL to check its authenticity.")
 
@@ -93,7 +81,6 @@ if st.button("Check News"):
         else:
             st.write("Scraping the website...")
             text, images = scrape_website(url)
-
             text_flag = False
 
             if text:
@@ -109,28 +96,19 @@ if st.button("Check News"):
                     key_sentences = ' '.join(text.split('.')[:3])
 
                 st.write("Checking text authenticity...")
-                text_result, review_details = check_text_fact(key_sentences, url, apikey)
-                first_word = text_result.split()[0].rstrip('.') if text_result else "" 
-                third_word = review_details.split()[2].rstrip('.') if review_details and len(review_details.split()) > 2 else ""
-
-                if first_word == "No" or third_word == "No":
+                text_result, review_details = check_text_fact(key_sentences, apikey, url)
+                if text_result in ["False", "Incorrect", "Fake", "Misleading"]:
+                    st.write("🚨 This news might be FAKE!")
+                    st.write("Fact Check Result:", text_result)
+                    st.write(review_details)
+                    text_flag = True
+                elif text_result == "No fact-check available":
                     st.write("Could not run text review.")
                     st.write("Reason: The webpage has not been reviewed by Google Claim Review yet.")
                     text_flag = None
-
-                elif first_word or third_word in {"Half", "False", "Mostly", "Misrepresentation", "Pants", "Fake", "Incorrect", "Misleading", "No", "Out", "Unfounded", "Exaggerated", "Debunked"}:
-                    st.write("🚨 This news might be FAKE!")
-                    st.write("Fact Check Result: ", text_result)
-                    st.write(review_details)
-                    text_flag = True
-                elif first_word == "Not":
-                    st.write("Fact Check Result: Independent assessment provided")
-                    st.write(review_details)
-                    text_flag = False    
                 else:
-                    st.write("Fact Check Result: ", text_result)
-                    if review_details:
-                        st.write("Supporting Evidence: ", review_details)
+                    st.write("Fact Check Result:", text_result)
+                    st.write("Supporting Evidence:", review_details)
                     text_flag = False
             else:
                 st.write("No text found on the page.")
@@ -144,7 +122,6 @@ if st.button("Check News"):
                     result = check_image_deepfake(img_url, model)
                     deepfake_results[img_url] = result
                     st.image(img_url, caption=result, use_container_width=True)
-
                 fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
             else:
                 st.write("No images found.")
@@ -152,7 +129,6 @@ if st.button("Check News"):
 
             st.subheader("Final Verdict")
             st.write("Combining text and image analysis...")
-
             if text_flag is True:
                 combined_confidence = max(fake_score, 0.7)
             elif text_flag is None:
