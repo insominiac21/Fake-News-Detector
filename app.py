@@ -8,26 +8,19 @@ from PIL import Image
 import io
 import base64
 import spacy
-import validators  
+import validators
 
 def scrape_website(url):
-    """Scrape the given news website for text and images."""
     response = requests.get(url)
     if response.status_code != 200:
         return None, None
-    
     soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # Extract text content
     paragraphs = soup.find_all('p')
     text_content = ' '.join([p.get_text() for p in paragraphs])
-    
-    # Extract image URLs, excluding data URLs
     images = [img['src'] for img in soup.find_all('img') if 'src' in img.attrs and not img['src'].startswith('data:')]
     return text_content, images
 
 def check_text_fact(text, api_key):
-    """Use Google Fact Check API to verify the text."""
     endpoint = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
     params = {
         "query": text,
@@ -36,13 +29,9 @@ def check_text_fact(text, api_key):
     response = requests.get(endpoint, params=params)
     if response.status_code != 200:
         return "Error accessing Fact Check API", None
-    
     data = response.json()
-    
-    # Debugging: Log the query and response
     print("Query Sent to API:", text)
     print("API Response:", data)
-    
     if 'claims' in data and len(data['claims']) > 0:
         claim = data['claims'][0]
         claim_review = claim.get('claimReview', [{}])[0]
@@ -52,13 +41,10 @@ def check_text_fact(text, api_key):
     return "No fact-check available", None
 
 def check_image_deepfake(image_url, model):
-    """Predict if the given image is a deepfake using a pre-trained model."""
     response = requests.get(image_url, stream=True)
     if response.status_code != 200:
         return "Error fetching image"
-    
     try:
-        # Convert image to RGB format
         img = Image.open(io.BytesIO(response.content))
         img = img.convert('RGB')
         img = img.resize((128, 128))
@@ -69,6 +55,60 @@ def check_image_deepfake(image_url, model):
     except Exception:
         return "Invalid Image"
 
+def analyze_url(url, api_key):
+    result = {
+        "text_result": None,
+        "review_details": None,
+        "text_flag": None,
+        "deepfake_results": {},
+        "combined_confidence": 0.0
+    }
+    text, images = scrape_website(url)
+    if text:
+        try:
+            nlp = spacy.load('en_core_web_sm')
+            doc = nlp(text)
+            key_claims = [ent.text for ent in doc.ents if ent.label_ in ['ORG', 'PERSON', 'EVENT']]
+            key_sentences = key_claims[0] if key_claims else ' '.join(text.split('.')[:3])
+        except:
+            key_sentences = ' '.join(text.split('.')[:3])
+        text_result, review_details = check_text_fact(key_sentences, api_key)
+        result["text_result"] = text_result
+        result["review_details"] = review_details
+
+        first_word = text_result.split()[0].rstrip('.') if text_result else ""
+        third_word = review_details.split()[2].rstrip('.') if review_details and len(review_details.split()) > 2 else ""
+
+        if first_word == "No" or third_word == "No":
+            result["text_flag"] = None
+        elif first_word or third_word in {"Half true", "False", "Mostly", "Misrepresentation", "Pants", "Fake", "Incorrect", "Misleading", "No", "Out", "Unfounded", "Exaggerated", "Debunked"}:
+            result["text_flag"] = True
+        elif first_word == "Not":
+            result["text_flag"] = False
+        else:
+            result["text_flag"] = False
+    else:
+        result["text_flag"] = False
+
+    if images:
+        model = load_model("deepfake_model.h5", compile=False)
+        deepfake_results = {}
+        for img_url in images[:3]:
+            deepfake_results[img_url] = check_image_deepfake(img_url, model)
+        result["deepfake_results"] = deepfake_results
+        fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
+    else:
+        fake_score = 0
+
+    if result["text_flag"] is True:
+        result["combined_confidence"] = max(fake_score, 0.7)
+    elif result["text_flag"] is None:
+        result["combined_confidence"] = fake_score
+    else:
+        result["combined_confidence"] = fake_score * 0.5
+
+    return result
+
 # Streamlit UI
 st.title("Fake News Detector")
 st.write("Enter a news article URL to check its authenticity.")
@@ -76,95 +116,35 @@ st.write("Enter a news article URL to check its authenticity.")
 url = st.text_input("Enter News URL:")
 apikey = "AIzaSyBpg-bVa5VvcNZ7T1ToyUKTbX-i43hdV3M"
 
-
 if st.button("Check News"):
     if url and apikey:
-        # Validate the URL
         if not validators.url(url) or not (url.startswith("http://") or url.startswith("https://")):
             st.error("Invalid URL. Please enter a valid HTTP or HTTPS URL.")
         else:
-            st.write("Scraping the website...")
-            text, images = scrape_website(url)
-            
-            text_flag = False  # Initialize text_flag with a default value
-            
-            if text:
-                st.subheader("Extracted Text")
-                st.write(text[:500] + "...")
-                
-                # Extract key sentences for fact-checking
-                try:
-                    nlp = spacy.load('en_core_web_sm')
-                    doc = nlp(text)
-                    key_claims = [ent.text for ent in doc.ents if ent.label_ in ['ORG', 'PERSON', 'EVENT']]
-                    key_sentences = key_claims[0] if key_claims else ' '.join(text.split('.')[:3])
-                except:
-                    key_sentences = ' '.join(text.split('.')[:3])  # Extract first 3 sentences
-                
-                st.write("Checking text authenticity...")
-                text_result, review_details = check_text_fact(key_sentences, apikey)
-                first_word = text_result.split()[0].rstrip('.') if text_result else ""  # Remove trailing period
-                third_word = review_details.split()[2].rstrip('.') if review_details and len(review_details.split()) > 2 else ""  # Get third word
-                
-                if first_word == "No" or third_word == "No":
-                    st.write("Could not run text review.")
-                    st.write("Reason: The webpage has not been reviewed by Google Claim Review yet.")
-                    text_flag = None
-            
-                elif first_word or third_word in {"Half true", "False", "Mostly", "Misrepresentation", "Pants", "Fake", "Incorrect", "Misleading", "No", "Out", "Unfounded", "Exaggerated", "Debunked"} or third_word in {"Half true", "False", "Mostly", "Misrepresentation", "Pants", "Fake", "Incorrect", "Misleading", "No", "Out", "Unfounded", "Exaggerated", "Debunked"}:
-                    st.write("🚨 This news might be FAKE!")
-                    st.write("Fact Check Result: ", text_result)
-                    st.write("\n", review_details)
-                    text_flag = True
-                elif first_word == "Not":  # Not Transcript
-                    st.write("Fact Check Result: Independent assessment provided")
-                    st.write("\n", review_details)
-                    text_flag = False    
-                else:
-                    st.write("Fact Check Result: ", text_result)
-                    if review_details:
-                        st.write("Supporting Evidence: ", review_details)
-                    text_flag = False
+            st.write("Scraping and analyzing the website...")
+            result = analyze_url(url, apikey)
+
+            if result["text_result"]:
+                st.subheader("Fact Check Result")
+                st.write("Result:", result["text_result"])
+                if result["review_details"]:
+                    st.write("Supporting Evidence:", result["review_details"])
             else:
-                st.write("No text found on the page.")
-                text_result = "Unknown"
-                review_details = None
-                text_flag = False  # Ensure text_flag is set even if no text is found
-            
-            if images:
-                st.subheader("Extracted Images")
-                model = load_model("deepfake_model.h5",compile=False)
-                deepfake_results = {}
-                
-                for img_url in images[:3]:  # Limit to 3 images for performance
-                    result = check_image_deepfake(img_url, model)
-                    deepfake_results[img_url] = result
-                    st.image(img_url, caption=result, use_container_width=True)
-                
-                # Calculate fake score
-                fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
+                st.write("No fact-check result available.")
+
+            if result["deepfake_results"]:
+                st.subheader("Image Analysis")
+                for img_url, status in result["deepfake_results"].items():
+                    st.image(img_url, caption=status, use_container_width=True)
             else:
-                st.write("No images found.")
-                fake_score = 0
-            
-            # Final Verdict Logic
+                st.write("No images found or processed.")
+
             st.subheader("Final Verdict")
-            st.write("Combining text and image analysis...")
-            # Adjust confidence calculation to prioritize text_flag
-            if text_flag is True:
-                combined_confidence = max(fake_score, 0.7)  # At least 70% if text is flagged as fake
-            elif text_flag is None:
-                combined_confidence = fake_score  # Use only fake_score if no fact-check is available
+            if result["text_flag"] is True and result["combined_confidence"] > 0.5:
+                st.error(f"🚨 This news might be FAKE! Confidence: {result['combined_confidence'] * 100:.2f}%")
+            elif result["text_flag"] is None and result["combined_confidence"] > 0.5:
+                st.warning(f"⚠️ This news might be PARTIALLY FAKE. Confidence: {result['combined_confidence'] * 100:.2f}%")
             else:
-                combined_confidence = fake_score * 0.5  # Reduce weight of fake_score if text is real
-            
-            # Display final verdict
-            if text_flag is True and combined_confidence > 0.5:
-                st.error(f"🚨 This news might be FAKE! Confidence: {combined_confidence * 100:.2f}%")
-            elif text_flag is None and combined_confidence > 0.5:
-                st.warning(f"⚠️ This news might be PARTIALLY FAKE. Confidence: {combined_confidence * 100:.2f}%")
-            elif text_flag is False or combined_confidence <= 0.5:
-                st.success(f"✅ This news appears REAL. Confidence: {(1 - combined_confidence) * 100:.2f}%")
-                
+                st.success(f"✅ This news appears REAL. Confidence: {(1 - result['combined_confidence']) * 100:.2f}%")
     else:
-        st.warning("Please enter a valid URL and API Key.")
+        st.warning("Please enter a valid URL and ensure API key is available in Streamlit secrets.")
