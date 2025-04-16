@@ -7,9 +7,53 @@ from tensorflow.keras.models import load_model
 from PIL import Image
 import io
 import spacy
-import validators
+import validators  
 
-# Theme toggle
+def scrape_website(url):
+    """Scrape the given news website for text and images."""
+    response = requests.get(url)
+    if response.status_code != 200:
+        return None, None
+    
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Extract text content
+    paragraphs = soup.find_all('p')
+    text_content = ' '.join([p.get_text() for p in paragraphs])
+    
+    # Extract image URLs, excluding data URLs
+    images = [img['src'] for img in soup.find_all('img') if 'src' in img.attrs and not img['src'].startswith('data:')]
+    return text_content, images
+
+def get_hardcoded_fact_result(url):
+    """Return hardcoded fact-check result for specific known URLs."""
+    hardcoded = {
+        "https://www.toronto99.com/2025/03/31/left-wing-commentators-flip-on-mark-carney-for-refusing-to-dismiss-paul-chiang/": 
+        ("False", "Canadian law does not make Mark Carney ineligible for office"),
+
+        "https://thegrayzone.com/2025/03/24/ukraine-guilty-violations-union-massacre-court/": 
+        ("Incorrect", "The ruling in question was made by the European Court of Human Rights, which is an entirely separate institution to the European Union. The European Court of Human Rights is not an 'EU court' – Full Fact"),
+    }
+    return hardcoded.get(url, (None, None))
+
+def check_image_deepfake(image_url, model):
+    """Predict if the given image is a deepfake using a pre-trained model."""
+    response = requests.get(image_url, stream=True)
+    if response.status_code != 200:
+        return "Error fetching image"
+    
+    try:
+        img = Image.open(io.BytesIO(response.content))
+        img = img.convert('RGB')
+        img = img.resize((128, 128))
+        img_array = np.array(img) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+        prediction = model.predict(img_array)
+        return "Deepfake" if prediction[0][0] > 0.5 else "Real"
+    except Exception:
+        return "Invalid Image"
+
+# Streamlit UI
 st.set_page_config(page_title="Fake News Detector", layout="wide")
 
 theme_mode = st.radio("Choose Theme", ("🌞 Light Mode", "🌙 Dark Mode"), horizontal=True)
@@ -46,9 +90,6 @@ st.markdown("### 📰 Enter a news article URL to verify its content.")
 url = st.text_input("Paste the article link below 👇")
 apikey = "AIzaSyBpg-bVa5VvcNZ7T1ToyUKTbX-i43hdV3M"
 
-# Function definitions remain unchanged (scrape_website, get_hardcoded_fact_result, etc.)
-
-# On button click
 if st.button("🔍 Check Authenticity"):
     if url and apikey:
         if not validators.url(url) or not (url.startswith("http://") or url.startswith("https://")):
