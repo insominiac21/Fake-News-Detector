@@ -74,7 +74,7 @@ st.title("Fake News Detector")
 st.write("Enter a news article URL to check its authenticity.")
 
 url = st.text_input("Enter News URL:")
-apikey = AIzaSyBpg-bVa5VvcNZ7T1ToyUKTbX-i43hdV3M
+apikey = "AIzaSyBpg-bVa5VvcNZ7T1ToyUKTbX-i43hdV3M"
 
 
 if st.button("Check News"):
