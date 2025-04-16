@@ -8,7 +8,16 @@ from PIL import Image
 import io
 import base64
 import spacy
-import validators  
+import validators
+from dotenv import load_dotenv  # Import dotenv to load environment variables
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get the API key from the environment
+API_KEY = os.getenv("api_key")
+
+
 
 def scrape_website(url):
     """Scrape the given news website for text and images."""
@@ -74,7 +83,7 @@ st.title("Fake News Detector")
 st.write("Enter a news article URL to check its authenticity.")
 
 url = st.text_input("Enter News URL:")
-apikey = #your own Api Key of google fact check tool
+apikey = API_KEY
 
 if st.button("Check News"):
     if url and apikey:
