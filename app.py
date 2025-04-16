@@ -95,7 +95,7 @@ if st.button("Check News"):
                 text_flag = True
             else:
                 st.subheader("🔎 Fact Check Result")
-                st.info("No official or hardcoded fact-check available for this URL.")
+                st.info("No official fact-check available for this URL.")
                 text_flag = None
 
             # IMAGE ANALYSIS
