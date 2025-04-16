@@ -54,109 +54,82 @@ def check_image_deepfake(image_url, model):
         return "Invalid Image"
 
 # Streamlit UI
-st.set_page_config(page_title="Fake News Detector", layout="wide")
+st.title("🕵️‍♂️ Fake News Detector")
+st.write("Enter a news article URL to check its authenticity.")
 
-theme_mode = st.radio("Choose Theme", ("🌞 Light Mode", "🌙 Dark Mode"), horizontal=True)
-
-# Applying theme styles
-if theme_mode == "🌞 Light Mode":
-    st.markdown(
-        """
-        <style>
-        body { background-color: #ffffff; color: #000000; }
-        .stApp { background-color: #f0f2f6; }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-else:
-    st.markdown(
-        """
-        <style>
-        body { background-color: #0e1117; color: #FAFAFA; }
-        .stApp { background-color: #262730; }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-# App title with style
-st.markdown(
-    "<h1 style='color: #FF4B4B; text-align: center;'>🕵️‍♂️ Fake News & Deepfake Detector</h1><br>",
-    unsafe_allow_html=True
-)
-
-st.markdown("### 📰 Enter a news article URL to verify its content.")
-
-url = st.text_input("Paste the article link below 👇")
+url = st.text_input("Enter News URL:")
 apikey = "AIzaSyBpg-bVa5VvcNZ7T1ToyUKTbX-i43hdV3M"
 
-if st.button("🔍 Check Authenticity"):
+if st.button("Check News"):
     if url and apikey:
         if not validators.url(url) or not (url.startswith("http://") or url.startswith("https://")):
-            st.error("❌ Invalid URL. Please enter a valid HTTP or HTTPS link.")
+            st.error("Invalid URL. Please enter a valid HTTP or HTTPS URL.")
         else:
-            with st.spinner("🔎 Scraping and analyzing..."):
-                text, images = scrape_website(url)
+            st.write("Scraping the website...")
+            text, images = scrape_website(url)
 
-                if text:
-                    st.markdown("## 📄 Extracted Text")
-                    st.markdown(f"<div style='padding:10px; background-color:#e6f2ff; border-radius:10px;'>{text[:1500]}{'...' if len(text) > 1500 else ''}</div>", unsafe_allow_html=True)
+            if text:
+                st.subheader("📰 Extracted Text")
+                st.write(text[:1500] + "..." if len(text) > 1500 else text)
 
-                    # NLP summarization
-                    try:
-                        nlp = spacy.load("en_core_web_sm")
-                        doc = nlp(text)
-                        key_claims = [ent.text for ent in doc.ents if ent.label_ in ['ORG', 'PERSON', 'EVENT']]
-                        key_sentences = key_claims[0] if key_claims else ' '.join(text.split('.')[:3])
-                    except:
-                        key_sentences = ' '.join(text.split('.')[:3])
-                else:
-                    st.warning("⚠️ No text found.")
-                    text = ""
-                    key_sentences = ""
+                # Extract key sentences using spaCy (optional)
+                try:
+                    nlp = spacy.load('en_core_web_sm')
+                    doc = nlp(text)
+                    key_claims = [ent.text for ent in doc.ents if ent.label_ in ['ORG', 'PERSON', 'EVENT']]
+                    key_sentences = key_claims[0] if key_claims else ' '.join(text.split('.')[:3])
+                except:
+                    key_sentences = ' '.join(text.split('.')[:3])
+            else:
+                st.warning("No text found on the page.")
+                text = ""
+                key_sentences = ""
 
-                # Fact-check
-                verdict, review = get_hardcoded_fact_result(url)
-                st.markdown("## 🕵️‍♂️ Fact Check Result")
-                if verdict:
-                    st.error(f"🚨 FAKE NEWS DETECTED: **{verdict}**")
-                    st.info(f"**Details:** {review}")
-                    text_flag = True
-                else:
-                    st.success("✅ No official/hardcoded fake news tag found.")
-                    text_flag = None
+            # Check for hardcoded fact-check
+            text_result, review_details = get_hardcoded_fact_result(url)
+            if text_result and review_details:
+                st.subheader("🔎 Fact Check Result")
+                st.error("🚨 This news might be FAKE!")
+                st.write("Fact Check Verdict:", text_result)
+                st.write("Details:", review_details)
+                text_flag = True
+            else:
+                st.subheader("🔎 Fact Check Result")
+                st.info("No official fact-check available for this URL.")
+                text_flag = None
 
-                # Image analysis
-                st.markdown("## 🖼️ Deepfake Image Analysis")
-                if images:
-                    model = load_model("deepfake_model.h5", compile=False)
-                    deepfake_results = {}
+            # IMAGE ANALYSIS
+            if images:
+                st.subheader("🖼️ Extracted Images")
+                model = load_model("deepfake_model.h5", compile=False)
+                deepfake_results = {}
 
-                    for img_url in images[:3]:
-                        result = check_image_deepfake(img_url, model)
-                        deepfake_results[img_url] = result
-                        st.image(img_url, caption=f"Prediction: {result}", use_container_width=True)
+                for img_url in images[:3]:
+                    result = check_image_deepfake(img_url, model)
+                    deepfake_results[img_url] = result
+                    st.image(img_url, caption=result, use_container_width=True)
 
-                    fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
-                else:
-                    st.warning("⚠️ No images found.")
-                    fake_score = 0
+                fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
+            else:
+                st.write("No images found.")
+                fake_score = 0
 
-                # Final verdict
-                st.markdown("## ✅ Final Verdict")
-                if text_flag is True:
-                    combined_confidence = max(fake_score, 0.7)
-                elif text_flag is None:
-                    combined_confidence = fake_score
-                else:
-                    combined_confidence = fake_score * 0.5
+            # FINAL VERDICT
+            st.subheader("✅ Final Verdict")
+            st.write("Combining text and image analysis...")
 
-                if combined_confidence > 0.5:
-                    st.error(f"❗ News is likely **FAKE**. Confidence: {combined_confidence*100:.2f}%")
-                elif combined_confidence > 0.3:
-                    st.warning(f"⚠️ News might be **partially misleading**. Confidence: {combined_confidence*100:.2f}%")
-                else:
-                    st.success(f"✅ News appears **REAL**. Confidence: {(1 - combined_confidence)*100:.2f}%")
+            if text_flag is True:
+                combined_confidence = max(fake_score, 0.7)
+            elif text_flag is None:
+                combined_confidence = fake_score
+            else:
+                combined_confidence = fake_score * 0.5
+
+            if text_flag is True and combined_confidence > 0.5:
+                st.error(f"🚨 This news might be FAKE! Confidence: {combined_confidence * 100:.2f}%")
+            elif text_flag is None and combined_confidence > 0.5:
+                st.warning(f"⚠️ This news might be PARTIALLY FAKE. Confidence: {combined_confidence * 100:.2f}%")
+            else:
+                st.success(f"✅ This news appears REAL. Confidence: {(1 - combined_confidence) * 100:.2f}%")
     else:
         st.warning("Please enter a valid URL and API Key.")
