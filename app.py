@@ -58,6 +58,7 @@ st.set_page_config(page_title="Fake News Detector", layout="wide")
 
 theme_mode = st.radio("Choose Theme", ("🌞 Light Mode", "🌙 Dark Mode"), horizontal=True)
 
+# Applying theme styles
 if theme_mode == "🌞 Light Mode":
     st.markdown(
         """
