@@ -8,17 +8,7 @@ from PIL import Image
 import io
 import base64
 import spacy
-import validators
-from dotenv import load_dotenv  # Import dotenv to load environment variables
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Get the API key from the environment
-API_KEY = os.getenv("api_key")
-
-
-
+import validators  
 
 def scrape_website(url):
     """Scrape the given news website for text and images."""
@@ -84,10 +74,11 @@ st.title("Fake News Detector")
 st.write("Enter a news article URL to check its authenticity.")
 
 url = st.text_input("Enter News URL:")
-apikey = API_KEY
+apikey = AIzaSyBpg-bVa5VvcNZ7T1ToyUKTbX-i43hdV3M
+
 
 if st.button("Check News"):
-    if apikey and url:
+    if url and apikey:
         # Validate the URL
         if not validators.url(url) or not (url.startswith("http://") or url.startswith("https://")):
             st.error("Invalid URL. Please enter a valid HTTP or HTTPS URL.")
@@ -142,13 +133,13 @@ if st.button("Check News"):
             
             if images:
                 st.subheader("Extracted Images")
-                model = load_model("deepfake_model.h5",compile=False)
+                model = load_model("deepfake_model.h5")
                 deepfake_results = {}
                 
                 for img_url in images[:3]:  # Limit to 3 images for performance
                     result = check_image_deepfake(img_url, model)
                     deepfake_results[img_url] = result
-                    st.image(img_url, caption=result, use_container_width=True)
+                    st.image(img_url, caption=result, use_column_width=True)
                 
                 # Calculate fake score
                 fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
