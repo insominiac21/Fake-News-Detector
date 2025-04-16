@@ -135,7 +135,7 @@ if st.button("🔍 Check Authenticity"):
                     for img_url in images[:3]:
                         result = check_image_deepfake(img_url, model)
                         deepfake_results[img_url] = result
-                        st.image(img_url, caption=f"Prediction: {result}", use_column_width=True)
+                        st.image(img_url, caption=f"Prediction: {result}", use_container_width=True)
 
                     fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
                 else:
