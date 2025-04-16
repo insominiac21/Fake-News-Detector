@@ -3,6 +3,7 @@ requests
 numpy
 beautifulsoup4
 tensorflow
-pillow
-validators
+Pillow
 spacy
+validators
+python-dotenv
