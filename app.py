@@ -141,7 +141,7 @@ if st.button("Check News"):
             
             if images:
                 st.subheader("Extracted Images")
-                model = load_model("deepfake_model.h50,compile=False")
+                model = load_model("deepfake_model.h5",compile=False)
                 deepfake_results = {}
                 
                 for img_url in images[:3]:  # Limit to 3 images for performance
