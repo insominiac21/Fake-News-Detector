@@ -165,5 +165,6 @@ if st.button("Check News"):
                 st.warning(f"⚠️ This news might be PARTIALLY FAKE. Confidence: {combined_confidence * 100:.2f}%")
             elif text_flag is False or combined_confidence <= 0.5:
                 st.success(f"✅ This news appears REAL. Confidence: {(1 - combined_confidence) * 100:.2f}%")
+                
     else:
         st.warning("Please enter a valid URL and API Key.")
