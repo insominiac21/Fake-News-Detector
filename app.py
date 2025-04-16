@@ -16,7 +16,7 @@ load_dotenv()
 
 # Get the API key from the environment
 GOOGLE_API_KEY = os.getenv("api_key")
-API_KEY = st.secrets["GOOGLE_API_KEY"]
+API_KEY = st.secrets[GOOGLE_API_KEY]
 
 
 def scrape_website(url):
