@@ -67,13 +67,12 @@ if st.button("Check News"):
         else:
             st.write("Scraping the website...")
             text, images = scrape_website(url)
-            text_flag = False
-            
+
             if text:
                 st.subheader("📰 Extracted Text")
-                st.write(text[:500] + "...")
+                st.write(text[:1500] + "..." if len(text) > 1500 else text)
 
-                # Extract some key phrases
+                # Extract key sentences using spaCy (optional)
                 try:
                     nlp = spacy.load('en_core_web_sm')
                     doc = nlp(text)
@@ -81,22 +80,22 @@ if st.button("Check News"):
                     key_sentences = key_claims[0] if key_claims else ' '.join(text.split('.')[:3])
                 except:
                     key_sentences = ' '.join(text.split('.')[:3])
-
-                # Check if hardcoded fact-check exists
-                text_result, review_details = get_hardcoded_fact_result(url)
-
-                if text_result and review_details:
-                    st.write("Checking text authenticity...")
-                    st.write("🚨 This news might be FAKE!")
-                    st.write("Fact Check Result: ", text_result)
-                    st.write("\n", review_details)
-                    text_flag = True
-                else:
-                    st.write("⚠️ No hardcoded fact-check result available for this URL.")
-                    st.write("This URL has not been reviewed yet.")
-                    text_flag = None
             else:
-                st.write("No text found on the page.")
+                st.warning("No text found on the page.")
+                text = ""
+                key_sentences = ""
+
+            # Check for hardcoded fact-check
+            text_result, review_details = get_hardcoded_fact_result(url)
+            if text_result and review_details:
+                st.subheader("🔎 Fact Check Result")
+                st.error("🚨 This news might be FAKE!")
+                st.write("Fact Check Verdict:", text_result)
+                st.write("Details:", review_details)
+                text_flag = True
+            else:
+                st.subheader("🔎 Fact Check Result")
+                st.info("No official or hardcoded fact-check available for this URL.")
                 text_flag = None
 
             # IMAGE ANALYSIS
@@ -118,6 +117,7 @@ if st.button("Check News"):
             # FINAL VERDICT
             st.subheader("✅ Final Verdict")
             st.write("Combining text and image analysis...")
+
             if text_flag is True:
                 combined_confidence = max(fake_score, 0.7)
             elif text_flag is None:
