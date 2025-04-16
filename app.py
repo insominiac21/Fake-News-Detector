@@ -86,7 +86,7 @@ url = st.text_input("Enter News URL:")
 apikey = API_KEY
 
 if st.button("Check News"):
-    if url and apikey:
+    if apikey:
         # Validate the URL
         if not validators.url(url) or not (url.startswith("http://") or url.startswith("https://")):
             st.error("Invalid URL. Please enter a valid HTTP or HTTPS URL.")
