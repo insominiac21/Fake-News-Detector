@@ -139,7 +139,7 @@ if st.button("Check News"):
                 for img_url in images[:3]:  # Limit to 3 images for performance
                     result = check_image_deepfake(img_url, model)
                     deepfake_results[img_url] = result
-                    st.image(img_url, caption=result, use_column_width=True)
+                    st.image(img_url, caption=result, use_container_width=True)
                 
                 # Calculate fake score
                 fake_score = sum(1 for v in deepfake_results.values() if v == "Deepfake") / max(len(deepfake_results), 1)
